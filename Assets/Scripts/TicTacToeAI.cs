@@ -1,10 +1,11 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.Serialization;
 
-public enum TicTacToeState{none, cross, circle}
+public enum TicTacToeState{None, Cross, Circle}
+
+public enum Player{Player, Ai}
 
 [System.Serializable]
 public class WinnerEvent : UnityEvent<int>
@@ -13,26 +14,27 @@ public class WinnerEvent : UnityEvent<int>
 
 public class TicTacToeAI : MonoBehaviour
 {
-
-	int _aiLevel;
-
-	TicTacToeState[,] boardState;
-
-	[SerializeField]
-	private bool _isPlayerTurn;
-
-	[SerializeField]
-	private int _gridSize = 3;
+	private int _aiLevel;
+	private EndMessage endMessage;
 	
-	[SerializeField]
-	private TicTacToeState playerState = TicTacToeState.cross;
-	TicTacToeState aiState = TicTacToeState.circle;
+    [SerializeField]
+    private GameBoard gameBoard;
+
+    [SerializeField]
+    private GameObject gamePanel;
+    
+    [SerializeField]
+	private bool isPlayerTurn;
 
 	[SerializeField]
-	private GameObject _xPrefab;
+	private TicTacToeState playerState = TicTacToeState.Circle;
+	TicTacToeState aiState = TicTacToeState.Cross;
 
-	[SerializeField]
-	private GameObject _oPrefab;
+	[FormerlySerializedAs("_xPrefab")] [SerializeField]
+	private GameObject xPrefab;
+
+	[FormerlySerializedAs("_oPrefab")] [SerializeField]
+	private GameObject oPrefab;
 
 	public UnityEvent onGameStarted;
 
@@ -46,10 +48,19 @@ public class TicTacToeAI : MonoBehaviour
 		if(onPlayerWin == null){
 			onPlayerWin = new WinnerEvent();
 		}
+
+		gamePanel = GameObject.Find("GamePanel");
+		endMessage = FindObjectOfType<EndMessage>();
+		gamePanel.SetActive(false);
 	}
 
-	public void StartAI(int AILevel){
-		_aiLevel = AILevel;
+	public void Start()
+	{
+		onPlayerWin.AddListener(endMessage.OnGameEnded);
+	}
+
+	public void StartAI(int aiLevel){
+		_aiLevel = aiLevel;
 		StartGame();
 	}
 
@@ -67,19 +78,65 @@ public class TicTacToeAI : MonoBehaviour
 	public void PlayerSelects(int coordX, int coordY){
 
 		SetVisual(coordX, coordY, playerState);
+
+		gameBoard.SetBoardPlacePlayerOccupied(coordX, coordY);
+
+		//Check if player wins after the latest move
+		var gameResult = gameBoard.CheckGameResult(Player.Player);
+		if (gameResult == GameResult.Tie)
+		{
+			onPlayerWin.Invoke(-1);
+		}else if (gameResult == GameResult.PlayerWin)
+		{
+			gamePanel.SetActive(true);
+			onPlayerWin.Invoke(0);
+		}
+		else
+		{
+
+			PiecePosition nextAiMove = gameBoard.CalculateAiMove(_aiLevel);
+			_triggers[nextAiMove.MyCoordX, nextAiMove.MyCoordY].SetInputEndabled(false);
+			AiSelects(nextAiMove.MyCoordX, nextAiMove.MyCoordY);
+		}
 	}
 
 	public void AiSelects(int coordX, int coordY){
 
 		SetVisual(coordX, coordY, aiState);
+		
+		gameBoard.SetBoardPlaceAiOccupied(coordX, coordY);
+
+		//Check if AI wins after the latest move
+		var gameResult = gameBoard.CheckGameResult(Player.Ai);
+		if (gameResult == GameResult.Tie)
+		{
+			onPlayerWin.Invoke(-1);
+		}else if (gameResult == GameResult.AiWin)
+		{
+			onPlayerWin.Invoke(1);
+		}
+		
+        SetPlayerTurn(true);
 	}
 
 	private void SetVisual(int coordX, int coordY, TicTacToeState targetState)
 	{
 		Instantiate(
-			targetState == TicTacToeState.circle ? _oPrefab : _xPrefab,
+			targetState == TicTacToeState.Circle ? oPrefab : xPrefab,
 			_triggers[coordX, coordY].transform.position,
 			Quaternion.identity
 		);
+
 	}
+
+    public bool IsPlayerTurn()
+    {
+        return isPlayerTurn;
+    }
+
+    public void SetPlayerTurn(bool playerTurn)
+    {
+        isPlayerTurn = playerTurn;
+    }
 }
+
